@@ -104,3 +104,5 @@ Werkzeug==3.0.6
 wrapt==1.17.2
 zipp==3.20.2
 xgboost
+wheel
+streamlit
