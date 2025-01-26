@@ -1,0 +1,8 @@
+[theme]
+primaryColor = "#1E90FF"             # Warna biru terang untuk tombol, ikon, dll.
+backgroundColor = "#FFFFFF"          # Latar belakang utama putih
+secondaryBackgroundColor = "#A7C7E7" # Latar belakang sekunder biru muda pastel
+textColor = "#000000"                # Warna teks hitam untuk kontras yang baik                 # Jenis font Helvetica
+
+[python]
+version = "3.9"
