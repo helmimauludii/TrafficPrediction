@@ -5,4 +5,4 @@ secondaryBackgroundColor = "#A7C7E7" # Latar belakang sekunder biru muda pastel
 textColor = "#000000"                # Warna teks hitam untuk kontras yang baik                 # Jenis font Helvetica
 
 [python]
-version = "3.9"
+version = "3.10"
