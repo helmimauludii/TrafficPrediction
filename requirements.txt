@@ -106,3 +106,6 @@ zipp==3.20.2
 xgboost
 wheel
 streamlit
+pip>=24.3.1
+setuptools>=66.0.0
+
