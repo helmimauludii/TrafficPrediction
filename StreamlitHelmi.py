@@ -31,28 +31,64 @@ st.set_page_config(layout="wide")
 # Title
 st.title("Cellular Network Traffic Prediction System")
 
-# Sidebar: Upload CSV File
-uploaded_file = st.sidebar.file_uploader("Upload your CSV file", type=["csv"])
-if uploaded_file:
+# Sidebar: Choose whether to upload your own data or not
+upload_choice = st.sidebar.radio(
+    "Do you want to upload your own data?",
+    ("No", "Yes")
+)
 
-    # Load and display data
-    data = pd.read_csv(uploaded_file)
+data = None  # Initialize the data variable
 
-    # Daftar kolom yang ingin dikecualikan dari konversi
-    excluded_columns = ['4G Avg UL Interference','Integrity','4G RSSI (Cells)', 'Date', 'Time', 'eNodeB Name', 'Cell Name']
+# Function for preprocessing the data
+def preprocess_data(data):
+    # List of columns to exclude from conversion
+    excluded_columns = ['4G Avg UL Interference', 'Integrity', '4G RSSI (Cells)', 'Date', 'Time', 'eNodeB Name', 'Cell Name']
 
-    # Mengubah semua kolom kecuali kolom yang dikecualikan menjadi tipe numerik
+    # Convert all columns except the excluded ones to numeric
     for col in data.columns:
         if col not in excluded_columns:
             data[col] = pd.to_numeric(data[col], errors='coerce')
 
-    # Mengubah kolom '4G RSSI (Cells)' menjadi tipe object
-    data['4G RSSI (Cells)'] = data['4G RSSI (Cells)'].astype(object)
+    # Convert '4G RSSI (Cells)' to object type
+    if '4G RSSI (Cells)' in data.columns:
+        data['4G RSSI (Cells)'] = data['4G RSSI (Cells)'].astype(object)
 
-    # Preprocessing: Merge 'Date' and 'Time' into 'Datetime'
+    # Merge 'Date' and 'Time' columns into a 'Datetime' column
     if 'Date' in data.columns and 'Time' in data.columns:
-        data['Datetime'] = pd.to_datetime(data['Date'] + ' ' + data['Time'], format='%m/%d/%Y %H:%M')
+        data['Datetime'] = pd.to_datetime(data['Date'] + ' ' + data['Time'], format='%m/%d/%Y %H:%M', errors='coerce')
         data = data.set_index('Datetime')
+
+    return data
+
+# Condition if the user chooses "No" (use data from GitHub)
+if upload_choice == "No":
+    github_url = "https://raw.githubusercontent.com/helmimauludii/TrafficPredictionHelmi/main/DataTrafikHourlyDesember-Mei.csv"
+    try:
+        # Read the data from GitHub
+        data = pd.read_csv(github_url)
+
+    except Exception as e:
+        st.error(f"Failed to load data from GitHub: {e}")
+
+# Condition if the user chooses "Yes" (upload their own data)
+elif upload_choice == "Yes":
+    uploaded_file = st.sidebar.file_uploader("Upload your CSV file", type=["csv"])
+    if uploaded_file is not None:
+        try:
+            # Read the uploaded file
+            data = pd.read_csv(uploaded_file)
+
+        except Exception as e:
+            st.error(f"Failed to read the uploaded CSV file: {e}")
+    else:
+        st.write("Please upload your CSV file.")
+
+# Apply preprocessing if data is loaded
+if data is not None:
+    try:
+        data = preprocess_data(data)
+    except Exception as e:
+        st.error(f"Error during preprocessing: {e}")
 
     # Sidebar: User input for date range
     date_option = st.sidebar.radio("Pilih rentang tanggal:", ('All Date', 'Custom Date'))
@@ -116,18 +152,18 @@ if uploaded_file:
             parameter_mode = st.sidebar.radio("Parameter Mode", ["Default", "Custom"])
 
             if parameter_mode == "Custom":
-                num_units = st.sidebar.slider("Jumlah Unit", min_value=10, max_value=200, value=50, step=10)
-                batch_size = st.sidebar.selectbox("Batch Size", options=[16, 32, 64, 128], index=1)
-                max_epochs = st.sidebar.slider("Epochs Max", min_value=10, max_value=500, value=100, step=10)
-                patience = st.sidebar.slider("Patience (Epoch)", min_value=1, max_value=50, value=10, step=1)
-                num_layers = st.sidebar.radio("Jumlah Layer", [1, 2], index=1)
+                num_units = st.sidebar.number_input("Jumlah Unit", min_value=4, max_value=256, value=128, step=4)
+                batch_size = st.sidebar.number_input("Batch Size", min_value=4, max_value=256, value=128, step=4)
+                max_epochs = st.sidebar.number_input("Epochs Max", min_value=1, max_value=500, value=100, step=1)
+                patience = st.sidebar.slider("Patience (Epoch)", min_value=5, max_value=50, value=10, step=5)
+                num_layers = st.sidebar.radio("Jumlah Layer", [1, 2, 3], index=1)
             else:
                 # Default Parameters
-                num_units = 50
-                batch_size = 32
+                num_units = 128
+                batch_size = 16
                 max_epochs = 100
                 patience = 10
-                num_layers = 2
+                num_layers = 1
 
             # Training/Test Split
             test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
@@ -136,7 +172,7 @@ if uploaded_file:
             num_lags = st.sidebar.number_input(
                 "Number of Lags", 
                 min_value=1, 
-                max_value=240,
+                max_value=720,
                 value=3, 
                 step=1
             )
@@ -152,7 +188,7 @@ if uploaded_file:
             future_steps = st.sidebar.number_input(
                 "Number of Future Steps to Predict", 
                 min_value=1, 
-                max_value=240, 
+                max_value=720, 
                 value=24, 
                 step=1
             )
@@ -164,10 +200,6 @@ if uploaded_file:
                 with st.spinner(f"Starting Deep Learning Prediction with {algorithm}..."):
                     # Update progress to 20%
                     progress.progress(20)
-                    # Prepare data for prediction
-                    filtered_data['Hour'] = filtered_data.index.hour
-                    filtered_data['Day'] = filtered_data.index.day
-                    filtered_data['Month'] = filtered_data.index.month
 
                     # Set predictor and target columns
                     X = filtered_data[feature_columns]
@@ -196,9 +228,27 @@ if uploaded_file:
 
                         # Membangun model LSTM
                         model = Sequential()
-                        model.add(LSTM(units=num_units, return_sequences=(num_layers == 2), input_shape=(X_train.shape[1], X_train.shape[2])))
-                        if num_layers == 2:
-                            model.add(LSTM(units=num_units))
+
+                        if num_layers == 1:
+                            # Jika hanya ada 1 layer, return_sequences harus False
+                            model.add(LSTM(units=num_units, return_sequences=False, input_shape=(X_train.shape[1], X_train.shape[2])))
+                            model.add(Dropout(0.2))  # Menambahkan dropout dengan rate 20%
+                        elif num_layers == 2:
+                            # Jika ada 2 layer, layer pertama memiliki return_sequences=True
+                            model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+                            model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
+                            model.add(LSTM(units=num_units, return_sequences=False))
+                            model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
+                        elif num_layers == 3:
+                            # Jika ada 3 layer, dua layer pertama memiliki return_sequences=True
+                            model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+                            model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
+                            model.add(LSTM(units=num_units, return_sequences=True))
+                            model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
+                            model.add(LSTM(units=num_units, return_sequences=False))
+                            model.add(Dropout(0.2))  # Menambahkan dropout setelah layer ketiga
+
+                        # Output layer
                         model.add(Dense(1))
 
                         # Kompilasi model
@@ -249,10 +299,10 @@ if uploaded_file:
                         y_pred_test = model.predict(X_test)
 
                         # Membalikkan normalisasi pada prediksi dan data sebenarnya
-                        y_train = scaler_y.inverse_transform(y_train)
-                        y_test = scaler_y.inverse_transform(y_test)
-                        y_pred_train = scaler_y.inverse_transform(y_pred_train)
-                        y_pred_test = scaler_y.inverse_transform(y_pred_test)
+                        y_train = scaler_y.inverse_transform(y_train.reshape(-1, 1))
+                        y_test = scaler_y.inverse_transform(y_test.reshape(-1, 1))
+                        y_pred_train = scaler_y.inverse_transform(y_pred_train.reshape(-1, 1))
+                        y_pred_test = scaler_y.inverse_transform(y_pred_test.reshape(-1, 1))
                     
                         progress.progress(100)  # Update progress to 100%
 
@@ -402,10 +452,10 @@ if uploaded_file:
                 col3, col4 = st.columns(2)
 
                 with col3:                
-                    st.write(f"### Prediksi ke Depan 4G Total Traffic in {selected_cell}")
+                    st.write(f"### Future Prediction in {selected_cell}")
                     plt.figure(figsize=(12, 6))  # Adjusted size for column layout
-                    plt.plot(future_df['Datetime'], future_df['Predicted 4G Total Traffic (GB)'], label='Prediksi', color='green')
-                    plt.title("Prediksi ke Depan: 4G Total Traffic (GB)")
+                    plt.plot(future_df['Datetime'], future_df[f'Predicted {target_column}'], label='Prediksi', color='green')
+                    plt.title("Future Prediction")
                     plt.xlabel("Datetime")
                     plt.ylabel(target_column)
                     plt.legend()
@@ -442,7 +492,7 @@ if uploaded_file:
                 plt.plot(original_index, y_test, label='Actual', color='blue')  # Data Aktual
                 plt.plot(original_index, y_pred_test, label='Predicted', color='red', linestyle='--')  # Data Prediksi
                 plt.plot(future_df['Datetime'], future_df['Predicted 4G Total Traffic (GB)'], 
-                        label='Future Predictions', color='green', linestyle=':')  # Prediksi Masa Depan
+                        label='Future Predictions LSTM', color='green', linestyle=':')  # Prediksi Masa Depan
                 plt.title(f"Actual vs Predicted vs Future Predictions {target_column} using {algorithm}")
                 plt.xlabel("Datetime")
                 plt.ylabel(target_column)
@@ -455,42 +505,51 @@ if uploaded_file:
 
             feature_columns = [col for col in filtered_data.columns if col != target_column]
 
-            # Training/Test Split
-            test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
-
-            # Input jumlah lag dari pengguna
-            num_lags = st.sidebar.number_input(
-                "Number of Lags", 
-                min_value=1, 
-                max_value=200, 
-                value=24, 
-                step=1
-            )
-
-            # Menambahkan lag features berdasarkan input pengguna
-            for lag in range(1, num_lags + 1):
-                filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
-
-            # Menghapus nilai NaN yang dihasilkan oleh lag
-            filtered_data = filtered_data.dropna()
-
             # Parameter selection for each algorithm
             if algorithm == "Random Forest":
                 st.sidebar.markdown("#### Random Forest Parameters")
-                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Manual Input", "Grid Search"])
+                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
-                    n_estimators = st.sidebar.slider("Number of Trees (n_estimators)", min_value=10, max_value=500, value=100, step=10)
-                    max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=50, value=10, step=1)
+                    n_estimators = st.sidebar.number_input("Number of Trees (n_estimators)", min_value=1, max_value=500, value=100, step=10)
+                    
+                    # Checkbox untuk opsi None pada max_depth
+                    no_max_depth = st.sidebar.checkbox("No maximum depth (None)")
+                    if no_max_depth:
+                        max_depth = None
+                    else:
+                        max_depth = st.sidebar.number_input("Max Depth", min_value=1, max_value=50, value=10, step=1)
+                    
                     min_samples_split = st.sidebar.slider("Min Samples Split", min_value=2, max_value=10, value=2, step=1)
+
+                    # Tambahkan max_features
+                    max_features_option = st.sidebar.radio(
+                        "Max Features",
+                        options=["All Features", "sqrt", "log2", "Custom"],
+                        index=0
+                    )
+                    if max_features_option == "All Features":
+                        max_features = None
+                    elif max_features_option == "Custom":
+                        max_features = st.sidebar.number_input(
+                            "Custom Max Features (int)",
+                            min_value=1,
+                            max_value=40,
+                            value=10,
+                            step=1
+                        )
+                    else:
+                        max_features = max_features_option
+
                 else:
                     n_estimators = None
                     max_depth = None
                     min_samples_split = None
+                    max_features = None
 
             elif algorithm == "Decision Tree":
                 st.sidebar.markdown("#### Decision Tree Parameters")
-                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Manual Input", "Grid Search"])
+                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
                     max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=50, value=10, step=1)
@@ -503,12 +562,12 @@ if uploaded_file:
 
             elif algorithm == "KNN":
                 st.sidebar.markdown("#### KNN Parameters")
-                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Manual Input", "Grid Search"])
+                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
-                    n_neighbors = st.sidebar.slider("Number of Neighbors (n_neighbors)", min_value=1, max_value=20, value=5, step=1)
+                    n_neighbors = st.sidebar.slider("Number of Neighbors (n_neighbors)", min_value=1, max_value=20, value=3, step=1)
                     weights = st.sidebar.selectbox("Weights", options=["uniform", "distance"])
-                    metric = st.sidebar.selectbox("Distance Metric", options=["minkowski", "euclidean", "manhattan"])
+                    metric = st.sidebar.selectbox("Distance Metric", options=["minkowski", "manhattan"])
                 else:
                     n_neighbors = None
                     weights = None
@@ -516,7 +575,7 @@ if uploaded_file:
 
             elif algorithm == "XGBoost":
                 st.sidebar.markdown("#### XGBoost Parameters")
-                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Manual Input", "Grid Search"])
+                param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
                     n_estimators = st.sidebar.slider("Number of Trees (n_estimators)", min_value=50, max_value=500, value=100, step=10)
@@ -528,6 +587,25 @@ if uploaded_file:
                     learning_rate = None
                     max_depth = None
                     subsample = None
+
+            # Training/Test Split
+            test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
+
+            # Input jumlah lag dari pengguna
+            num_lags = st.sidebar.number_input(
+                "Number of Lags", 
+                min_value=1, 
+                max_value=720, 
+                value=3, 
+                step=1
+            )
+
+            # Menambahkan lag features berdasarkan input pengguna
+            for lag in range(1, num_lags + 1):
+                filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
+
+            # Menghapus nilai NaN yang dihasilkan oleh lag
+            filtered_data = filtered_data.dropna()
 
             # Input untuk jumlah langkah prediksi masa depan
             future_steps = st.sidebar.number_input(
@@ -572,6 +650,7 @@ if uploaded_file:
                                 n_estimators=n_estimators,
                                 max_depth=max_depth,
                                 min_samples_split=min_samples_split,
+                                max_features=max_features,
                                 random_state=42
                             )
                         elif param_selection_mode == "Grid Search":
@@ -581,8 +660,9 @@ if uploaded_file:
                             ])
                             param_grid = {
                                 'random_forest__n_estimators': [50, 100, 200],
-                                'random_forest__max_depth': [5, 10, 20],
-                                'random_forest__min_samples_split': [2, 5, 10]
+                                'random_forest__max_depth': [5, 10, 20, None],
+                                'random_forest__min_samples_split': [2, 5, 10],
+                                'random_forest__max_features': ['sqrt', 'log2', None, 0.5]
                             }
                             tscv = TimeSeriesSplit(n_splits=5)
                             grid_search = GridSearchCV(pipeline, param_grid, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1)
@@ -624,11 +704,19 @@ if uploaded_file:
 
                     elif algorithm == "KNN":
                         if param_selection_mode == "Manual Input":
-                            model = KNeighborsRegressor(
-                                n_neighbors=n_neighbors,
-                                weights=weights,
-                                metric=metric
-                            )
+                            pipeline = Pipeline([
+                                ('scaler', StandardScaler()),
+                                ('knn', KNeighborsRegressor(
+                                    n_neighbors=n_neighbors,
+                                    weights=weights,
+                                    metric=metric
+                                ))
+                            ])
+
+                            # Fit the pipeline to the training data
+                            pipeline.fit(X_train, y_train)
+                            model = pipeline  # Assign the pipeline to model
+
                         elif param_selection_mode == "Grid Search":
                             pipeline = Pipeline([
                                 ('scaler', StandardScaler()),
@@ -637,7 +725,7 @@ if uploaded_file:
                             param_grid = {
                                 'knn__n_neighbors': [3, 5, 10],
                                 'knn__weights': ['uniform', 'distance'],
-                                'knn__metric': ['minkowski', 'euclidean', 'manhattan']
+                                'knn__metric': ['minkowski', 'manhattan']
                             }
                             tscv = TimeSeriesSplit(n_splits=5)
                             grid_search = GridSearchCV(pipeline, param_grid, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1)
@@ -807,6 +895,26 @@ if uploaded_file:
                         plt.title('Feature Importance for Random Forest')
                         plt.gca().invert_yaxis()
                         st.pyplot(plt)
+
+                    if param_selection_mode == "Manual Input":
+                        # Feature Importance
+                        feature_importances = model.feature_importances_
+                        importance_df = pd.DataFrame({
+                            'Feature': feature_columns,
+                            'Importance': feature_importances
+                        }).sort_values(by='Importance', ascending=False)
+
+                        st.write("Feature Importance (Random Forest):")
+                        st.dataframe(importance_df)
+
+                        # Plot Feature Importance
+                        plt.figure(figsize=(10, 6))
+                        plt.barh(importance_df['Feature'], importance_df['Importance'], color='skyblue')
+                        plt.xlabel('Feature Importance')
+                        plt.ylabel('Feature')
+                        plt.title('Feature Importance for Random Forest')
+                        plt.gca().invert_yaxis()
+                        st.pyplot(plt)
                 
                 if algorithm == "KNN":
                     if param_selection_mode == "Grid Search":
@@ -880,7 +988,7 @@ if uploaded_file:
         # SARIMAX Prediction Code
         if prediction_type == "Statistic":
             # Statistic Prediction Configuration
-            algorithm = st.sidebar.selectbox("Choose Model", ["SARIMA", "SARIMAX"])
+            algorithm = st.sidebar.selectbox("Choose Model", ["SARIMA"])
 
             # Pilih metode input parameter
             param_mode = st.sidebar.radio("Parameter Selection Mode", ["Auto (Auto-ARIMA)", "Manual Input"])
@@ -977,6 +1085,13 @@ if uploaded_file:
 
                         progress.progress(80)  # Update progress to 80%
 
+                        progress.progress(100)
+                        st.success("Prediction complete!")
+                        # Catat waktu selesai
+                        end_time = time.time()
+                        duration = end_time - start_time
+                        st.write(f"Time taken for prediction: {duration:.2f} seconds")
+
                         # Evaluasi prediksi
                         mse = mean_squared_error(y_test, y_pred)
                         mae = mean_absolute_error(y_test, y_pred)
@@ -1014,134 +1129,8 @@ if uploaded_file:
                         plt.legend()
                         st.pyplot(plt)
 
-                        progress.progress(100)
-                        st.success("Prediction complete!")
-                        # Catat waktu selesai
-                        end_time = time.time()
-                        duration = end_time - start_time
-                        st.write(f"Time taken for prediction: {duration:.2f} seconds")
-
-                    # Update progress to 20%
-                    progress.progress(20)
-
-                    if algorithm == "SARIMAX":
-                        y = filtered_data[target_column]
-                        
-                        feature_columns = [col for col in filtered_data.columns if col != target_column]
-                        
-                        X = filtered_data[feature_columns] if feature_columns else None
-
-                        # Pisahkan data menjadi train dan test
-                        train_size = int(len(y) * (1 - test_split))
-
-                        y_train, y_test = y[:train_size], y[train_size:]
-                        X_train, X_test = X[:train_size], X[train_size:]
-
-                        # Siapkan `X_future` untuk prediksi masa depan
-                        X_future = X_test.iloc[-future_steps:, :]
-
-                        if param_mode == "Auto (Auto-ARIMA)":
-                            # Auto-ARIMA untuk mencari parameter terbaik
-                            sarima_model = auto_arima(
-                                y_train,
-                                X=X_train,
-                                seasonal=True, m=24,  # Seasonal period menggunakan input S
-                                start_p=0, start_q=0, max_p=5, max_q=5,
-                                start_P=0, start_Q=0, max_P=2, max_Q=2,
-                                d=None, D=None,  # Auto-ARIMA akan menentukan nilai differencing
-                                trace=True,
-                                error_action='ignore',
-                                suppress_warnings=True,
-                                stepwise=True
-                            )
-                            # Menampilkan parameter terbaik
-                            st.write("Best SARIMA Parameters:", sarima_model.order, sarima_model.seasonal_order)
-
-                            # Fit ulang model menggunakan parameter terbaik
-                            sarima_fit = SARIMAX(
-                                y_train,
-                                exog=X_train,
-                                order=sarima_model.order,
-                                seasonal_order=sarima_model.seasonal_order,
-                                enforce_stationarity=False,
-                                enforce_invertibility=False
-                            ).fit(disp=False)
-                        else:
-                            # Manual Input: Bangun model SARIMA menggunakan input pengguna
-                            sarima_model = SARIMAX(
-                                y_train,
-                                exog=X_train,
-                                order=(p, d, q),
-                                seasonal_order=(P, D, Q, S),
-                                enforce_stationarity=False,
-                                enforce_invertibility=False
-                            )
-                            sarima_fit = sarima_model.fit(disp=False)
-
-                        progress.progress(60)  # Update progress to 60%
-
-                        # Prediksi pada data uji, pastikan indeks sinkron
-                        y_pred = sarima_fit.predict(start=train_size, end=len(y) - 1, exog=X_test)
-                        y_pred = pd.Series(y_pred, index=y_test.index)  # Pastikan indeks y_pred sesuai dengan y_test
-
-                        # Prediksi ke masa depan
-                        future_forecast = sarima_fit.get_forecast(steps=future_steps, exog=X_future)
-                        future_mean = future_forecast.predicted_mean
-                        future_conf_int = future_forecast.conf_int()
-
-                        # Sinkronkan panjang prediksi dengan y_test
-                        if len(y_pred) != len(y_test):
-                            st.warning(f"Length mismatch: Adjusting y_pred length from {len(y_pred)} to {len(y_test)}")
-                            y_pred = pd.Series(y_pred[:len(y_test)], index=y_test.index)
-
-                        progress.progress(80)  # Update progress to 80%
-
-                        # Evaluasi prediksi
-                        mse = mean_squared_error(y_test, y_pred)
-                        mae = mean_absolute_error(y_test, y_pred)
-                        r2 = r2_score(y_test, y_pred)
-                        mape = np.mean(np.abs((y_test - y_pred) / y_test)) * 100
-
-                        # Display metrics
-                        st.markdown(f"### Evaluation metrics for {target_column} using {algorithm} ({param_mode}):")
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric(label="Mean Squared Error (MSE)", value=f"{mse:.4f}")
-                        with col2:
-                            st.metric(label="Mean Absolute Error (MAE)", value=f"{mae:.4f}")
-                        with col3:
-                            st.metric(label="R² Score", value=f"{r2:.4f}")
-                        with col4:
-                            st.metric(label="MAPE", value=f"{mape:.2f}%")
-
-                        # Visualisasi hasil prediksi dan prediksi masa depan
-                        plt.figure(figsize=(12, 6))
-                        plt.plot(y_test.index, y_test, label="Actual", color="blue")
-                        plt.plot(y_test.index, y_pred, label="Predicted", color="orange", linestyle="--")
-                        plt.plot(
-                            pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
-                            future_mean, label="Future Predictions", color="green", linestyle=":"
-                        )
-                        plt.fill_between(
-                            pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
-                            future_conf_int.iloc[:, 0], future_conf_int.iloc[:, 1],
-                            color='green', alpha=0.2, label="Confidence Interval"
-                        )
-                        plt.title(f"SARIMAX Model: Actual vs Predicted vs Future ({param_mode})")
-                        plt.xlabel("Datetime")
-                        plt.ylabel(target_column)
-                        plt.legend()
-                        st.pyplot(plt)
-
-                        progress.progress(100)
-                        st.success("Prediction complete!")
-                        # Catat waktu selesai
-                        end_time = time.time()
-                        duration = end_time - start_time
-                        st.write(f"Time taken for prediction: {duration:.2f} seconds")
-
         if prediction_type == "Hybrid":
-            algorithm = st.sidebar.selectbox("Choose Model", ["LSTM + SARIMAX", "GRU + SARIMAX"])
+            algorithm = st.sidebar.selectbox("Choose Model", ["LSTM + SARIMAX"])
 
              # Deep Learning Prediction Configuration
             feature_columns = [col for col in filtered_data.columns if col != target_column]
@@ -1150,7 +1139,7 @@ if uploaded_file:
             parameter_mode = st.sidebar.radio("Parameter Mode", ["Default", "Custom"])
 
             if parameter_mode == "Custom":
-                num_units = st.sidebar.slider("Jumlah Unit", min_value=10, max_value=200, value=50, step=10)
+                num_units = st.sidebar.slider("Jumlah Unit", min_value=10, max_value=256, value=128, step=10)
                 batch_size = st.sidebar.selectbox("Batch Size", options=[16, 32, 64, 128], index=1)
                 max_epochs = st.sidebar.slider("Epochs Max", min_value=10, max_value=500, value=100, step=10)
                 patience = st.sidebar.slider("Patience (Epoch)", min_value=1, max_value=50, value=10, step=1)
@@ -1163,11 +1152,11 @@ if uploaded_file:
                 seasonal_order = eval(seasonal_order)
             else:
                 # Default Parameters
-                num_units = 50
-                batch_size = 32
+                num_units = 128
+                batch_size = 16
                 max_epochs = 100
                 patience = 10
-                num_layers = 2
+                num_layers = 1
 
                 sarimax_order = ("(1,1,1)")  # Example: (1,1,1)
                 seasonal_order = ("(1,1,1,24)")  # Example: (1,1,1,24)
@@ -1182,7 +1171,7 @@ if uploaded_file:
             num_lags = st.sidebar.number_input(
                 "Number of Lags", 
                 min_value=1, 
-                max_value=240,
+                max_value=720,
                 value=3, 
                 step=1
             )
@@ -1198,7 +1187,7 @@ if uploaded_file:
             future_steps = st.sidebar.number_input(
                 "Number of Future Steps to Predict", 
                 min_value=1, 
-                max_value=240, 
+                max_value=720, 
                 value=24, 
                 step=1
             )
@@ -1251,14 +1240,27 @@ if uploaded_file:
                     X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
                     X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
 
+                    # Membangun model LSTM
                     model = Sequential()
-                    model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
 
-                    if num_layers >= 2:
-                        model.add(LSTM(units=num_units, return_sequences=(num_layers > 2)))
-
-                    if num_layers == 3:
-                        model.add(LSTM(units=num_units))
+                    if num_layers == 1:
+                        # Jika hanya ada 1 layer, return_sequences harus False
+                        model.add(LSTM(units=num_units, return_sequences=False, input_shape=(X_train.shape[1], X_train.shape[2])))
+                        model.add(Dropout(0.2))  # Menambahkan dropout dengan rate 20%
+                    elif num_layers == 2:
+                        # Jika ada 2 layer, layer pertama memiliki return_sequences=True
+                        model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
+                        model.add(LSTM(units=num_units, return_sequences=False))
+                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
+                    elif num_layers == 3:
+                        # Jika ada 3 layer, dua layer pertama memiliki return_sequences=True
+                        model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
+                        model.add(LSTM(units=num_units, return_sequences=True))
+                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
+                        model.add(LSTM(units=num_units, return_sequences=False))
+                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer ketiga
 
                     model.add(Dense(1))
 
@@ -1369,9 +1371,9 @@ if uploaded_file:
 
                     # Visualisasi hasil perbaikan
                     plt.figure(figsize=(12, 6))
-                    plt.plot(filtered_data.index[-len(y_test):], scaler_y.inverse_transform(y_test), label="Actual")
+                    plt.plot(filtered_data.index[-len(y_test):], scaler_y.inverse_transform(y_test), label="Actual", color='blue')
                     plt.plot(filtered_data.index[-len(y_test):], y_pred_test, label="LSTM Predictions")
-                    plt.plot(future_df['Datetime'], future_df['Predicted'], label="Improved Hybrid Predictions", linestyle="--", color="green")
+                    plt.plot(future_df['Datetime'], future_df['Predicted'], label="Future Predictions LSTM + SARIMA", linestyle="--", color="green")
                     plt.xlabel("Datetime")
                     plt.ylabel("4G Total Traffic (GB)")
                     plt.legend()
@@ -1408,16 +1410,18 @@ if uploaded_file:
         num_rows, num_cols = data_vis.shape
         st.caption(f"Jumlah baris: {num_rows}, Jumlah kolom: {num_cols}")
 
+        target_column_vis = st.sidebar.selectbox("Select Column to Visualize", data_vis.select_dtypes(include=[np.number]).columns)
+
         # Visualisasi 4G Total Traffic Per Cell Name
-        st.write("### 4G Total Traffic Per Cell Name")
+        st.write(f"### {target_column_vis} Per Cell Name")
         traffic_per_cell = (
-            data.groupby([data.index, 'Cell Name'])['4G Total Traffic (GB)']
+            data.groupby([data.index, 'Cell Name'])[target_column_vis]
             .sum()
             .reset_index()
         )
 
         # Pivot data agar tiap Cell Name menjadi kolom
-        pivot_data = traffic_per_cell.pivot(index='Datetime', columns='Cell Name', values='4G Total Traffic (GB)')
+        pivot_data = traffic_per_cell.pivot(index='Datetime', columns='Cell Name', values=target_column_vis)
         pivot_data = pivot_data.fillna(0)
 
         # Membuat figure plotly
@@ -1434,9 +1438,9 @@ if uploaded_file:
 
         # Update layout
         fig.update_layout(
-            title='4G Total Traffic Per Cell Name',
+            title=(f'{target_column_vis} Per Cell Name'),
             xaxis_title='Waktu',
-            yaxis_title='4G Total Traffic (GB)',
+            yaxis_title=target_column_vis,
             legend_title='Cell Name',
             hovermode="x unified",
             template="plotly_dark",
@@ -1485,7 +1489,6 @@ if uploaded_file:
             plt.tight_layout()
             st.pyplot(plt)
 
-        target_column_vis = st.sidebar.selectbox("Select Column to Visualize", data_vis.select_dtypes(include=[np.number]).columns)
         if st.sidebar.button("Start Visualization"):
             progress = st.progress(0)
             with st.spinner(f"Starting Visualization for {target_column_vis}..."):
