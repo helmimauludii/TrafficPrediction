@@ -62,7 +62,7 @@ def preprocess_data(data):
 
 # Condition if the user chooses "No" (use data from GitHub)
 if upload_choice == "No":
-    github_url = "https://raw.githubusercontent.com/helmimauludii/TrafficPredictionHelmi/refs/heads/main/DataTrafikHourlyDesember-Mei%20fixed.csv"
+    github_url = "https://raw.githubusercontent.com/helmimauludii/TrafficPredictionHelmi/refs/heads/main/DataTrafikHourlyDesember-Meifixed.csv"
     try:
         # Read the data from GitHub
         data = pd.read_csv(github_url)
