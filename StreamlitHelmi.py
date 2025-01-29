@@ -1091,11 +1091,12 @@ if data is not None:
                         progress.progress(80)  # Update progress to 80%
 
                         progress.progress(100)
-                        st.success("Prediction complete!")
+                        
                         # Catat waktu selesai
                         end_time = time.time()
                         duration = end_time - start_time
-                        st.write(f"Time taken for prediction: {duration:.2f} seconds")
+                        
+                        st.success(f"Prediction complete in {duration:.2f} seconds!")
 
                         # Evaluasi prediksi
                         mse = mean_squared_error(y_test, y_pred)
