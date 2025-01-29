@@ -139,6 +139,18 @@ if data is not None:
 
         target_column = st.sidebar.selectbox("Field to predict", filtered_data.select_dtypes(include=[np.number]).columns)
 
+        # Jumlah lag
+        num_lags = 3
+
+        # Menambahkan lag features berdasarkan input pengguna
+        for lag in range(1, num_lags + 1):
+            filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
+        
+        # Tambahkan informasi waktu sebagai fitur tambahan
+        filtered_data['Hour'] = filtered_data.index.hour
+        filtered_data['Day'] = filtered_data.index.day
+        filtered_data['Month'] = filtered_data.index.month
+        
         # Sidebar: Choose Prediction Type
         prediction_type = st.sidebar.selectbox("Choose Prediction Type", ["Deep Learning", "Machine Learning", "Statistic", "Hybrid"])
 
@@ -162,24 +174,11 @@ if data is not None:
                 num_units = 128
                 batch_size = 16
                 max_epochs = 100
-                patience = 10
+                patience = 50
                 num_layers = 1
 
             # Training/Test Split
             test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
-
-            # Input jumlah lag dari pengguna
-            num_lags = st.sidebar.number_input(
-                "Number of Lags", 
-                min_value=1, 
-                max_value=720,
-                value=3, 
-                step=1
-            )
-
-            # Menambahkan lag features berdasarkan input pengguna
-            for lag in range(1, num_lags + 1):
-                filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
 
             # Menghapus nilai NaN yang dihasilkan oleh lag
             filtered_data = filtered_data.dropna()
@@ -391,15 +390,13 @@ if data is not None:
                 
                 progress.progress(100)  # Update progress to 100%
                 
-                st.success("Prediction complete!")
                 # Catat waktu selesai
                 end_time = time.time()
 
                 # Hitung durasi
                 duration = end_time - start_time
 
-                # Tampilkan hasil prediksi dan waktu proses
-                st.write(f"Time taken for prediction: {duration:.2f} seconds")
+                st.success(f"Prediction complete in {duration:.2f} seconds!")
                     
                 # Evaluasi model pada data uji
                 mse = mean_squared_error(y_test, y_pred_test)
@@ -499,6 +496,19 @@ if data is not None:
                 plt.legend()
                 st.pyplot(plt)
 
+                # Plot training and validation loss
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.plot(history.history['loss'], label='Train Loss', color='blue')
+                ax.plot(history.history['val_loss'], label='Validation Loss', color='orange')
+                ax.set_title('Model Loss During Training')
+                ax.set_xlabel('Epochs')
+                ax.set_ylabel('Loss')
+                ax.legend()
+                ax.grid(True)
+
+                # Display the plot in Streamlit
+                st.pyplot(fig)
+
         if prediction_type == "Machine Learning":
             # Machine Learning Prediction Configuration
             algorithm = st.sidebar.selectbox("Choose Model", ["Random Forest", "Decision Tree", "KNN", "XGBoost"])
@@ -552,8 +562,8 @@ if data is not None:
                 param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
-                    max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=50, value=10, step=1)
-                    min_samples_split = st.sidebar.slider("Min Samples Split", min_value=2, max_value=10, value=2, step=1)
+                    max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=8, value=2, step=1)
+                    min_samples_split = st.sidebar.slider("Min Samples Split", min_value=2, max_value=4, value=2, step=2)
                     min_samples_leaf = st.sidebar.slider("Min Samples Leaf", min_value=1, max_value=10, value=1, step=1)
                 else:
                     max_depth = None
@@ -578,10 +588,9 @@ if data is not None:
                 param_selection_mode = st.sidebar.radio("Parameter Selection Mode", ["Grid Search", "Manual Input"])
 
                 if param_selection_mode == "Manual Input":
-                    n_estimators = st.sidebar.slider("Number of Trees (n_estimators)", min_value=50, max_value=500, value=100, step=10)
-                    learning_rate = st.sidebar.slider("Learning Rate", min_value=0.01, max_value=0.3, value=0.1, step=0.01)
-                    max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=50, value=10, step=1)
-                    subsample = st.sidebar.slider("Subsample", min_value=0.5, max_value=1.0, value=1.0, step=0.1)
+                    n_estimators = st.sidebar.slider("Number of Trees (n_estimators)", min_value=50, max_value=500, value=100, step=5)
+                    learning_rate = st.sidebar.slider("Learning Rate", min_value=0.01, max_value=0.5, value=0.3, step=0.1)
+                    max_depth = st.sidebar.slider("Max Depth", min_value=3, max_value=9, value=6, step=3)
                 else:
                     n_estimators = None
                     learning_rate = None
@@ -590,19 +599,6 @@ if data is not None:
 
             # Training/Test Split
             test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
-
-            # Input jumlah lag dari pengguna
-            num_lags = st.sidebar.number_input(
-                "Number of Lags", 
-                min_value=1, 
-                max_value=720, 
-                value=3, 
-                step=1
-            )
-
-            # Menambahkan lag features berdasarkan input pengguna
-            for lag in range(1, num_lags + 1):
-                filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
 
             # Menghapus nilai NaN yang dihasilkan oleh lag
             filtered_data = filtered_data.dropna()
@@ -624,10 +620,6 @@ if data is not None:
                 with st.spinner(f"Starting Machine Learning Prediction with {algorithm}..."):
                     # Update progress to 20%
                     progress.progress(20)
-                    # Prepare data for prediction
-                    filtered_data['Hour'] = filtered_data.index.hour
-                    filtered_data['Day'] = filtered_data.index.day
-                    filtered_data['Month'] = filtered_data.index.month
 
                     # Set predictor and target columns
                     X = filtered_data[feature_columns]
@@ -688,9 +680,9 @@ if data is not None:
                                 ('dtr', DecisionTreeRegressor(random_state=42))
                             ])
                             param_grid = {
-                                'dtr__max_depth': [5, 10, 15, None],
-                                'dtr__min_samples_split': [2, 5, 10],
-                                'dtr__min_samples_leaf': [1, 2, 4]
+                                'dtr__max_depth': [1, 2, 3, 4, 5, 6, 7, 8],
+                                'dtr__min_samples_split': [2, 4],
+                                'dtr__min_samples_leaf': [1, 2]
                             }
                             tscv = TimeSeriesSplit(n_splits=5)
                             grid_search = GridSearchCV(pipeline, param_grid, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1)
@@ -753,10 +745,9 @@ if data is not None:
                                 ('xgbr', XGBRegressor(objective='reg:squarederror', random_state=42))
                             ])
                             param_grid = {
-                                'xgbr__n_estimators': [50, 100, 150],
-                                'xgbr__learning_rate': [0.01, 0.1, 0.2],
-                                'xgbr__max_depth': [3, 5, 7],
-                                'xgbr__subsample': [0.8, 1.0]
+                                'xgbr__n_estimators': [5, 10, 50, 100],
+                                'xgbr__learning_rate': [0.1, 0.3, 0.5],
+                                'xgbr__max_depth': [3, 6, 9],
                             }
                             tscv = TimeSeriesSplit(n_splits=5)
                             grid_search = GridSearchCV(pipeline, param_grid, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1)
@@ -785,7 +776,7 @@ if data is not None:
                 future_df = pd.DataFrame({
                     'Datetime': future_dates,
                     'Predicted': future_predictions
-                }).set_index('Datetime')
+                })
 
                 end_time = time.time()
                 duration = end_time - start_time
@@ -843,38 +834,52 @@ if data is not None:
                     plt.legend()
                     st.pyplot(plt)
 
-                # Tambahkan kembali identitas data ke dalam DataFrame
-                comparison_df = pd.DataFrame({
-                    "Datetime": filtered_data.index[-len(y_test):],  # Ambil tanggal dari data asli untuk subset data uji
-                    "Cell Name": selected_cell,  # Cell yang dipilih
-                    "Actual": y_test.values,  # Data aktual
-                    "Predicted": y_pred,  # Data prediksi
-                    "Difference": y_test.values - y_pred  # Selisih antara actual dan predicted
-                })
+                # Kolom untuk Actual vs Predicted (5 Hari Terakhir) dan tabel komparasi
+                col3, col4 = st.columns(2)
 
-                # Tampilkan tabel hasil
-                st.write(f"### Actual vs Predicted Data for Cell: {selected_cell}")
-                st.dataframe(comparison_df)
+                with col3:                
+                    st.write(f"### Future Prediction in {selected_cell}")
+                    plt.figure(figsize=(12, 6))  # Adjusted size for column layout
+                    plt.plot(future_df['Datetime'], future_df['Predicted'], label='Prediksi', color='green')
+                    plt.title("Future Prediction")
+                    plt.xlabel("Datetime")
+                    plt.ylabel(target_column)
+                    plt.legend()
+                    st.pyplot(plt)
 
-                # Tambahkan tombol untuk mengunduh tabel
-                csv = comparison_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label=f"Download Actual vs Predicted Data for {selected_cell} as CSV",
-                    data=csv,
-                    file_name=f'actual_vs_predicted_{selected_cell}.csv',
-                    mime='text/csv',
-                )
+                with col4:
+                    # Tambahkan kembali identitas data ke dalam DataFrame
+                    comparison_df = pd.DataFrame({
+                        "Datetime": filtered_data.index[-len(y_test):],  # Ambil tanggal dari data asli untuk subset data uji
+                        "Cell Name": selected_cell,  # Cell yang dipilih
+                        "Actual": y_test.values,  # Data aktual
+                        "Predicted": y_pred,  # Data prediksi
+                        "Difference": y_test.values - y_pred  # Selisih antara actual dan predicted
+                    })
+
+                    # Tampilkan tabel hasil
+                    st.write(f"### Actual vs Predicted Data for Cell: {selected_cell}")
+                    st.dataframe(comparison_df)
+
+                    # Tambahkan tombol untuk mengunduh tabel
+                    csv = comparison_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label=f"Download Actual vs Predicted Data for {selected_cell} as CSV",
+                        data=csv,
+                        file_name=f'actual_vs_predicted_{selected_cell}.csv',
+                        mime='text/csv',
+                    )
  
                 # Plot Actual, Predicted, and Future Predictions
                 plt.figure(figsize=(12, 6))
-                plt.plot(y_test.index, y_test.values, label='Actual', color='blue')
-                plt.plot(y_test.index, y_pred, label='Predicted', color='red', linestyle='--')
-                plt.plot(future_df.index, future_df['Predicted'], label='Future Predictions', color='green', linestyle=':')
-                plt.title('Actual vs Predicted vs Future Predictions')
-                plt.xlabel('Time')
-                plt.ylabel('Values')
-                plt.legend()
-                st.pyplot(plt)
+                plt.plot(y_test.index, y_test.values, label='Actual', color='blue')  # Plot data aktual
+                plt.plot(y_test.index, y_pred, label='Predicted', color='red', linestyle='--')  # Plot prediksi
+                plt.plot(future_df['Datetime'], future_df['Predicted'], label='Future Predictions', color='green', linestyle=':')  # Plot prediksi masa depan
+                plt.title('Actual vs Predicted vs Future Predictions')  # Judul grafik
+                plt.xlabel('Time')  # Label sumbu X
+                plt.ylabel('Values')  # Label sumbu Y
+                plt.legend()  # Tambahkan legenda
+                st.pyplot(plt)  # Tampilkan plot pada Streamlit
 
                 if algorithm == "Random Forest":
                     if param_selection_mode == "Grid Search":
@@ -1019,7 +1024,7 @@ if data is not None:
             if st.sidebar.button("Start Predict"):
                 # Catat waktu mulai
                 start_time = time.time()
-                st.sidebar.write("Starting Statistic prediction with", algorithm, "...")
+
                 progress = st.progress(0)
                 with st.spinner(f"Starting Statistic prediction with {algorithm}..."):
 
@@ -1099,7 +1104,7 @@ if data is not None:
                         mape = np.mean(np.abs((y_test - y_pred) / y_test)) * 100
 
                         # Display metrics
-                        st.markdown(f"### Evaluation metrics for {target_column} using {algorithm} ({param_mode}):")
+                        st.markdown(f"### Evaluation metrics for {target_column} using {algorithm} ({param_mode}) in {selected_cell}:")
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
                             st.metric(label="Mean Squared Error (MSE)", value=f"{mse:.4f}")
@@ -1109,25 +1114,43 @@ if data is not None:
                             st.metric(label="R² Score", value=f"{r2:.4f}")
                         with col4:
                             st.metric(label="MAPE", value=f"{mape:.2f}%")
+                        
+                        # Pastikan akses ke index asli sebelum split
+                        original_index = filtered_data.index[-len(y_test):]  # Ambil index data uji (y_test)
 
-                        # Visualisasi hasil prediksi dan prediksi masa depan
-                        plt.figure(figsize=(12, 6))
-                        plt.plot(y_test.index, y_test, label="Actual", color="blue")
-                        plt.plot(y_test.index, y_pred, label="Predicted", color="orange", linestyle="--")
-                        plt.plot(
-                            pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
-                            future_mean, label="Future Predictions", color="green", linestyle=":"
-                        )
-                        plt.fill_between(
-                            pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
-                            future_conf_int.iloc[:, 0], future_conf_int.iloc[:, 1],
-                            color='green', alpha=0.2, label="Confidence Interval"
-                        )
-                        plt.title(f"SARIMA Model: Actual vs Predicted vs Future ({param_mode})")
-                        plt.xlabel("Datetime")
-                        plt.ylabel(target_column)
-                        plt.legend()
-                        st.pyplot(plt)
+                        # Kolom untuk Actual vs Predicted dan Prediksi 3 Hari ke Depan
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            # Visualisasi hasil prediksi dan prediksi masa depan
+                            plt.figure(figsize=(12, 6))
+                            plt.plot(y_test.index, y_test, label="Actual", color="blue")
+                            plt.plot(y_test.index, y_pred, label="Predicted", color="red", linestyle="--")
+                            plt.plot(
+                                pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
+                                future_mean, label="Future Predictions", color="green", linestyle=":"
+                            )
+                            plt.fill_between(
+                                pd.date_range(start=y_test.index[-1], periods=future_steps + 1, freq='H')[1:],
+                                future_conf_int.iloc[:, 0], future_conf_int.iloc[:, 1],
+                                color='green', alpha=0.2, label="Confidence Interval"
+                            )
+                            plt.title(f"SARIMA Model: Actual vs Predicted vs Future ({param_mode})")
+                            plt.xlabel("Datetime")
+                            plt.ylabel(target_column)
+                            plt.legend()
+                            st.pyplot(plt)
+
+                        with col2:
+                            # Plot perbandingan antara data sebenarnya dan prediksi (default 120 jam terakhir)
+                            plt.figure(figsize=(12, 6))
+                            plt.plot(original_index[-120:], y_test[-120:], label='Data Sebenarnya', color='blue')
+                            plt.plot(original_index[-120:], y_pred[-120:], label='Data Prediksi', color='red', linestyle='--')
+                            plt.title(f"Actual vs Predicted {target_column} (120 Jam Terakhir) using {algorithm} in {selected_cell}")
+                            plt.xlabel("Datetime")
+                            plt.ylabel(target_column)
+                            plt.legend()
+                            st.pyplot(plt)
 
         if prediction_type == "Hybrid":
             algorithm = st.sidebar.selectbox("Choose Model", ["LSTM + SARIMAX"])
@@ -1155,7 +1178,7 @@ if data is not None:
                 num_units = 128
                 batch_size = 16
                 max_epochs = 100
-                patience = 10
+                patience = 50
                 num_layers = 1
 
                 sarimax_order = ("(1,1,1)")  # Example: (1,1,1)
@@ -1166,19 +1189,6 @@ if data is not None:
 
             # Training/Test Split
             test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
-
-            # Input jumlah lag dari pengguna
-            num_lags = st.sidebar.number_input(
-                "Number of Lags", 
-                min_value=1, 
-                max_value=720,
-                value=3, 
-                step=1
-            )
-
-            # Menambahkan lag features berdasarkan input pengguna
-            for lag in range(1, num_lags + 1):
-                filtered_data[f"{target_column}_lag{lag}"] = filtered_data[target_column].shift(lag)
 
             # Menghapus nilai NaN yang dihasilkan oleh lag
             filtered_data = filtered_data.dropna()
@@ -1328,7 +1338,6 @@ if data is not None:
 
                     progress.progress(100)
 
-                    st.success("Prediction complete!")
                     # Catat waktu selesai
                     end_time = time.time()
 
@@ -1336,7 +1345,7 @@ if data is not None:
                     duration = end_time - start_time
 
                     # Tampilkan hasil prediksi dan waktu proses
-                    st.write(f"Time taken for prediction: {duration:.2f} seconds")
+                    st.success(f"Prediction complete in {duration:.2f} seconds!")
 
                     # Evaluasi model pada data uji
                     try:
@@ -1387,6 +1396,19 @@ if data is not None:
                     plt.ylabel(target_column)
                     plt.legend()
                     st.pyplot(plt)
+
+                    # Plot training and validation loss
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.plot(history.history['loss'], label='Train Loss', color='blue')
+                    ax.plot(history.history['val_loss'], label='Validation Loss', color='orange')
+                    ax.set_title('Model Loss During Training')
+                    ax.set_xlabel('Epochs')
+                    ax.set_ylabel('Loss')
+                    ax.legend()
+                    ax.grid(True)
+
+                    # Display the plot in Streamlit
+                    st.pyplot(fig)
                                            
     elif menu == "Data Visualization":
         st.subheader("Data Visualization")
