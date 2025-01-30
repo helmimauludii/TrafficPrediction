@@ -6,17 +6,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split, GridSearchCV, TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
-from sklearn.ensemble import GradientBoostingRegressor
 from xgboost import XGBRegressor
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_squared_log_error
 from sklearn.inspection import permutation_importance
@@ -52,6 +49,8 @@ def preprocess_data(data):
     # Convert '4G RSSI (Cells)' to object type
     if '4G RSSI (Cells)' in data.columns:
         data['4G RSSI (Cells)'] = data['4G RSSI (Cells)'].astype(object)
+    
+    #data['4G DL Traffic (GB)'] = data['4G DL Traffic (GB)'].astype(object)
 
     # Merge 'Date' and 'Time' columns into a 'Datetime' column
     if 'Date' in data.columns and 'Time' in data.columns:
@@ -152,7 +151,7 @@ if data is not None:
         filtered_data['Month'] = filtered_data.index.month
         
         # Sidebar: Choose Prediction Type
-        prediction_type = st.sidebar.selectbox("Choose Prediction Type", ["Deep Learning", "Machine Learning", "Statistic", "Hybrid"])
+        prediction_type = st.sidebar.selectbox("Choose Prediction Type", ["Deep Learning", "Machine Learning", "Statistic"])
 
         if prediction_type == "Deep Learning":
              # Deep Learning Prediction Configuration
@@ -248,7 +247,7 @@ if data is not None:
                             model.add(Dropout(0.2))  # Menambahkan dropout setelah layer ketiga
 
                         # Output layer
-                        model.add(Dense(1))
+                        model.add(Dense(1, activation='linear'))
 
                         # Kompilasi model
                         model.compile(optimizer='adam', loss='mean_squared_error')
@@ -290,7 +289,7 @@ if data is not None:
                         future_dates = pd.date_range(start=data.index[-1], periods=future_steps + 1, freq='H')[1:]
                         future_df = pd.DataFrame({
                             'Datetime': future_dates,
-                            'Predicted 4G Total Traffic (GB)': predictions.flatten()
+                            f'Predicted {target_column}': predictions.flatten()
 })
 
                         # Prediksi menggunakan model
@@ -308,8 +307,8 @@ if data is not None:
                     # GRU Algorithm
                     if algorithm == "GRU":
                         # Normalisasi data menggunakan StandardScaler
-                        scaler_X = StandardScaler()
-                        scaler_y = StandardScaler()
+                        scaler_X = MinMaxScaler(feature_range=(0, 1))
+                        scaler_y = MinMaxScaler(feature_range=(0, 1))
                         
                         X = scaler_X.fit_transform(X)
                         y = scaler_y.fit_transform(y.values.reshape(-1, 1))
@@ -374,7 +373,7 @@ if data is not None:
                         future_dates = pd.date_range(start=data.index[-1], periods=future_steps + 1, freq='H')[1:]
                         future_df = pd.DataFrame({
                             'Datetime': future_dates,
-                            'Predicted 4G Total Traffic (GB)': predictions.flatten()
+                            f'Predicted {target_column}': predictions.flatten()
 })
 
                         # Prediksi menggunakan model
@@ -488,7 +487,7 @@ if data is not None:
                 plt.figure(figsize=(12, 6))
                 plt.plot(original_index, y_test, label='Actual', color='blue')  # Data Aktual
                 plt.plot(original_index, y_pred_test, label='Predicted', color='red', linestyle='--')  # Data Prediksi
-                plt.plot(future_df['Datetime'], future_df['Predicted 4G Total Traffic (GB)'], 
+                plt.plot(future_df['Datetime'], future_df[f'Predicted {target_column}'], 
                         label='Future Predictions LSTM', color='green', linestyle=':')  # Prediksi Masa Depan
                 plt.title(f"Actual vs Predicted vs Future Predictions {target_column} using {algorithm}")
                 plt.xlabel("Datetime")
@@ -565,10 +564,12 @@ if data is not None:
                     max_depth = st.sidebar.slider("Max Depth", min_value=1, max_value=8, value=2, step=1)
                     min_samples_split = st.sidebar.slider("Min Samples Split", min_value=2, max_value=4, value=2, step=2)
                     min_samples_leaf = st.sidebar.slider("Min Samples Leaf", min_value=1, max_value=10, value=1, step=1)
+                    max_features = st.sidebar.selectbox("Max Features", [None, "sqrt", "log2"])
                 else:
                     max_depth = None
                     min_samples_split = None
                     min_samples_leaf = None
+                    max_features = None
 
             elif algorithm == "KNN":
                 st.sidebar.markdown("#### KNN Parameters")
@@ -591,11 +592,16 @@ if data is not None:
                     n_estimators = st.sidebar.slider("Number of Trees (n_estimators)", min_value=50, max_value=500, value=100, step=5)
                     learning_rate = st.sidebar.slider("Learning Rate", min_value=0.01, max_value=0.5, value=0.3, step=0.1)
                     max_depth = st.sidebar.slider("Max Depth", min_value=3, max_value=9, value=6, step=3)
+                    colsample_bytree = st.sidebar.slider("Colsample Bytree", min_value=0.1, max_value=1.0, value=1.0, step=0.1)
+                    colsample_bylevel = st.sidebar.slider("Colsample Bylevel", min_value=0.1, max_value=1.0, value=1.0, step=0.1)
+                    colsample_bynode = st.sidebar.slider("Colsample Bynode", min_value=0.1, max_value=1.0, value=1.0, step=0.1)
                 else:
                     n_estimators = None
                     learning_rate = None
                     max_depth = None
-                    subsample = None
+                    colsample_bytree = None
+                    colsample_bylevel = None
+                    colsample_bynode = None
 
             # Training/Test Split
             test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
@@ -672,6 +678,7 @@ if data is not None:
                                 max_depth=max_depth,
                                 min_samples_split=min_samples_split,
                                 min_samples_leaf=min_samples_leaf,
+                                max_features=max_features,
                                 random_state=42
                             )
                         elif param_selection_mode == "Grid Search":
@@ -735,9 +742,11 @@ if data is not None:
                                 n_estimators=n_estimators,
                                 learning_rate=learning_rate,
                                 max_depth=max_depth,
-                                subsample=subsample,
                                 objective='reg:squarederror',
-                                random_state=42
+                                random_state=42,
+                                colsample_bytree=colsample_bytree,  # Menambahkan colsample_bytree
+                                colsample_bylevel=colsample_bylevel,  # Menambahkan colsample_bylevel
+                                colsample_bynode=colsample_bynode 
                             )
                         elif param_selection_mode == "Grid Search":
                             pipeline = Pipeline([
@@ -965,6 +974,25 @@ if data is not None:
                         plt.title('Feature Importance for Decision Tree')
                         plt.gca().invert_yaxis()
                         st.pyplot(plt)
+                    if param_selection_mode == "Manual Input":
+                        # Feature Importance
+                        feature_importances = model.feature_importances_
+                        importance_df = pd.DataFrame({
+                            'Feature': feature_columns,
+                            'Importance': feature_importances
+                        }).sort_values(by='Importance', ascending=False)
+
+                        st.write("Feature Importance (Random Forest):")
+                        st.dataframe(importance_df)
+
+                        # Plot Feature Importance
+                        plt.figure(figsize=(10, 6))
+                        plt.barh(importance_df['Feature'], importance_df['Importance'], color='skyblue')
+                        plt.xlabel('Feature Importance')
+                        plt.ylabel('Feature')
+                        plt.title('Feature Importance for Random Forest')
+                        plt.gca().invert_yaxis()
+                        st.pyplot(plt)
 
                 if algorithm == "XGBoost":
                     if param_selection_mode == "Grid Search":
@@ -990,7 +1018,7 @@ if data is not None:
                         plt.ylabel('Feature')
                         st.pyplot(plt)
 
-        # SARIMAX Prediction Code
+        # SARIMA Prediction Code
         if prediction_type == "Statistic":
             # Statistic Prediction Configuration
             algorithm = st.sidebar.selectbox("Choose Model", ["SARIMA"])
@@ -1095,7 +1123,6 @@ if data is not None:
                         # Catat waktu selesai
                         end_time = time.time()
                         duration = end_time - start_time
-                        
                         st.success(f"Prediction complete in {duration:.2f} seconds!")
 
                         # Evaluasi prediksi
@@ -1152,264 +1179,6 @@ if data is not None:
                             plt.ylabel(target_column)
                             plt.legend()
                             st.pyplot(plt)
-
-        if prediction_type == "Hybrid":
-            algorithm = st.sidebar.selectbox("Choose Model", ["LSTM + SARIMAX"])
-
-             # Deep Learning Prediction Configuration
-            feature_columns = [col for col in filtered_data.columns if col != target_column]
-            
-            # Pilihan parameter default atau custom
-            parameter_mode = st.sidebar.radio("Parameter Mode", ["Default", "Custom"])
-
-            if parameter_mode == "Custom":
-                num_units = st.sidebar.slider("Jumlah Unit", min_value=10, max_value=256, value=128, step=10)
-                batch_size = st.sidebar.selectbox("Batch Size", options=[16, 32, 64, 128], index=1)
-                max_epochs = st.sidebar.slider("Epochs Max", min_value=10, max_value=500, value=100, step=10)
-                patience = st.sidebar.slider("Patience (Epoch)", min_value=1, max_value=50, value=10, step=1)
-                num_layers = st.sidebar.radio("Jumlah Layer", [1, 2, 3], index=1)
-
-                sarimax_order = st.sidebar.text_input("SARIMAX Order (p,d,q)", "(1,1,1)")  # Example: (1,1,1)
-                seasonal_order = st.sidebar.text_input("Seasonal Order (P,D,Q,S)", "(1,1,1,24)")  # Example: (1,1,1,24)
-
-                sarimax_order = eval(sarimax_order)
-                seasonal_order = eval(seasonal_order)
-            else:
-                # Default Parameters
-                num_units = 128
-                batch_size = 16
-                max_epochs = 100
-                patience = 50
-                num_layers = 1
-
-                sarimax_order = ("(1,1,1)")  # Example: (1,1,1)
-                seasonal_order = ("(1,1,1,24)")  # Example: (1,1,1,24)
-
-                sarimax_order = eval(sarimax_order)
-                seasonal_order = eval(seasonal_order)
-
-            # Training/Test Split
-            test_split = st.sidebar.slider("Split for test/training", 0.1, 0.9, 0.3)
-
-            # Menghapus nilai NaN yang dihasilkan oleh lag
-            filtered_data = filtered_data.dropna()
-
-            # Input untuk jumlah langkah prediksi masa depan
-            future_steps = st.sidebar.number_input(
-                "Number of Future Steps to Predict", 
-                min_value=1, 
-                max_value=720, 
-                value=24, 
-                step=1
-            )
-            
-            if st.sidebar.button("Start Predict"):
-                # Catat waktu mulai
-                start_time = time.time()
-                progress = st.progress(0)
-                with st.spinner(f"Starting Hybrid Model (LSTM + SARIMAX)..."):
-                    # Update progress to 20%
-                    progress.progress(20)
-
-                    # Prepare data for prediction
-                    filtered_data['Hour'] = filtered_data.index.hour
-                    filtered_data['Day'] = filtered_data.index.day
-                    filtered_data['Month'] = filtered_data.index.month
-
-                    # Set predictor and target columns
-                    X = filtered_data[feature_columns]
-                    y = filtered_data[target_column]
-
-                    progress.progress(40)  # Update progress to 40%
-
-                    # Train SARIMAX model
-                    sarimax_model = SARIMAX(y, order=sarimax_order, seasonal_order=seasonal_order)
-                    sarimax_fit = sarimax_model.fit(disp=False)
-                    sarimax_predictions = sarimax_fit.predict(start=0, end=len(y)-1)
-
-                    # Add SARIMAX predictions as a feature
-                    filtered_data['SARIMAX_Predictions'] = sarimax_predictions
-
-                    # Update features
-                    feature_columns.append('SARIMAX_Predictions')
-                    X = filtered_data[feature_columns]
-
-                    # **Step 2: LSTM for Short-Term Prediction**
-                    # Normalisasi data menggunakan MinMaxScaler
-                    scaler_X = MinMaxScaler(feature_range=(0, 1))
-                    scaler_y = MinMaxScaler(feature_range=(0, 1))
-
-                    X = scaler_X.fit_transform(X)
-                    y = scaler_y.fit_transform(y.values.reshape(-1, 1))
-
-                    # Membagi data menjadi train dan test set
-                    train_size = int(len(X) * (1 - test_split))
-                    X_train, X_test = X[:train_size], X[train_size:]
-                    y_train, y_test = y[:train_size], y[train_size:]
-
-                    # Reshape X agar sesuai dengan input yang diperlukan LSTM
-                    X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
-                    X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
-
-                    # Membangun model LSTM
-                    model = Sequential()
-
-                    if num_layers == 1:
-                        # Jika hanya ada 1 layer, return_sequences harus False
-                        model.add(LSTM(units=num_units, return_sequences=False, input_shape=(X_train.shape[1], X_train.shape[2])))
-                        model.add(Dropout(0.2))  # Menambahkan dropout dengan rate 20%
-                    elif num_layers == 2:
-                        # Jika ada 2 layer, layer pertama memiliki return_sequences=True
-                        model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
-                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
-                        model.add(LSTM(units=num_units, return_sequences=False))
-                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
-                    elif num_layers == 3:
-                        # Jika ada 3 layer, dua layer pertama memiliki return_sequences=True
-                        model.add(LSTM(units=num_units, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
-                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer pertama
-                        model.add(LSTM(units=num_units, return_sequences=True))
-                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer kedua
-                        model.add(LSTM(units=num_units, return_sequences=False))
-                        model.add(Dropout(0.2))  # Menambahkan dropout setelah layer ketiga
-
-                    model.add(Dense(1))
-
-                    # Kompilasi model
-                    model.compile(optimizer='adam', loss='mean_squared_error')
-
-                    progress.progress(60)
-
-                    # Menggunakan EarlyStopping untuk mencegah overfitting
-                    early_stop = EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
-
-                    # Melatih model
-                    history = model.fit(
-                        X_train, y_train,
-                        epochs=max_epochs,
-                        batch_size=batch_size,
-                        validation_split=0.2,
-                        callbacks=[early_stop],
-                        verbose=1
-                    )
-
-                    progress.progress(80)
-
-                    # **Step 3: Future Prediction**
-                    # Prediksi menggunakan LSTM
-                    y_pred_test = model.predict(X_test)
-                    y_pred_test = scaler_y.inverse_transform(y_pred_test)
-
-                    # Prediksi ke masa depan dengan SARIMAX
-                    future_sarimax = sarimax_fit.get_forecast(steps=future_steps)
-                    future_sarimax_mean = future_sarimax.predicted_mean
-
-                    # Kombinasikan prediksi SARIMAX dan LSTM dengan skala yang sama
-                    future_predictions = []
-                    last_known_values = X_test[-1].reshape(1, 1, -1)
-                    for i in range(future_steps):
-                        # Prediksi LSTM
-                        lstm_prediction = model.predict(last_known_values, verbose=0)[0][0]
-                        
-                        # Prediksi SARIMAX
-                        sarimax_prediction = future_sarimax_mean.iloc[i]
-                        
-                        # Normalisasi SARIMAX agar setara dengan LSTM
-                        sarimax_normalized = scaler_y.transform([[sarimax_prediction]])[0][0]
-                        
-                        # Kombinasikan menggunakan rata-rata berbobot
-                        combined_prediction = 0.7 * lstm_prediction + 0.3 * sarimax_normalized
-                        
-                        # Tambahkan ke daftar prediksi
-                        future_predictions.append(combined_prediction)
-                        
-                        # Update input dengan nilai prediksi
-                        new_input = np.append(last_known_values[0, 0, 1:], lstm_prediction).reshape(1, 1, -1)
-                        last_known_values = new_input
-
-                    # Kembalikan ke skala asli
-                    future_predictions = scaler_y.inverse_transform(np.array(future_predictions).reshape(-1, 1))
-
-                    # Buat DataFrame untuk prediksi hybrid
-                    future_dates = pd.date_range(start=filtered_data.index[-1], periods=future_steps + 1, freq='H')[1:]
-                    future_df = pd.DataFrame({
-                        'Datetime': future_dates,
-                        'Predicted': future_predictions.flatten()
-                    })
-
-                    progress.progress(100)
-
-                    # Catat waktu selesai
-                    end_time = time.time()
-
-                    # Hitung durasi
-                    duration = end_time - start_time
-
-                    # Tampilkan hasil prediksi dan waktu proses
-                    st.success(f"Prediction complete in {duration:.2f} seconds!")
-
-                    # Evaluasi model pada data uji
-                    try:
-                        # Kembalikan y_test ke skala asli
-                        y_test_original = scaler_y.inverse_transform(y_test)
-
-                        # Hitung metrik evaluasi menggunakan data asli
-                        mse = mean_squared_error(y_test_original, y_pred_test)
-                        mae = mean_absolute_error(y_test_original, y_pred_test)
-                        r2 = r2_score(y_test_original, y_pred_test)
-                        msle = mean_squared_log_error(y_test_original, y_pred_test)
-                        mape = np.mean(np.abs((y_test_original - y_pred_test) / y_test_original)) * 100
-
-                        # Display metrics
-                        st.markdown(f"### Evaluation metrics for {target_column} using Hybrid LSTM + SARIMAX in {selected_cell}:")
-                        col1, col2, col3, col4, col5 = st.columns(5)
-                        with col1:
-                            st.metric(label="Mean Squared Error (MSE)", value=f"{mse:.4f}")
-                        with col2:
-                            st.metric(label="Mean Absolute Error (MAE)", value=f"{mae:.4f}")
-                        with col3:
-                            st.metric(label="R² Score", value=f"{r2:.4f}")
-                        with col4:
-                            st.metric(label="MSLE", value=f"{msle:.4f}")
-                        with col5:
-                            st.metric(label="MAPE", value=f"{mape:.2f}%")
-                    except Exception as e:
-                        st.error(f"Error in evaluation metrics: {e}")
-
-                    # Pastikan akses ke index asli sebelum split
-                    original_index = filtered_data.index[-len(y_test):]  # Ambil index data uji (y_test)
-
-                    # Visualisasi hasil perbaikan
-                    plt.figure(figsize=(12, 6))
-                    plt.plot(filtered_data.index[-len(y_test):], scaler_y.inverse_transform(y_test), label="Actual", color='blue')
-                    plt.plot(filtered_data.index[-len(y_test):], y_pred_test, label="LSTM Predictions")
-                    plt.plot(future_df['Datetime'], future_df['Predicted'], label="Future Predictions LSTM + SARIMA", linestyle="--", color="green")
-                    plt.xlabel("Datetime")
-                    plt.ylabel("4G Total Traffic (GB)")
-                    plt.legend()
-                    st.pyplot(plt)
-
-                    st.write(f"### Future Predictions 4G Total Traffic in {selected_cell}")
-                    plt.figure(figsize=(12, 6))
-                    plt.plot(future_df['Datetime'], future_df['Predicted'], label='Future Predictions', color='green', linestyle='-.')
-                    plt.title("Future Predictions: 4G Total Traffic (GB)")
-                    plt.xlabel("Datetime")
-                    plt.ylabel(target_column)
-                    plt.legend()
-                    st.pyplot(plt)
-
-                    # Plot training and validation loss
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.plot(history.history['loss'], label='Train Loss', color='blue')
-                    ax.plot(history.history['val_loss'], label='Validation Loss', color='orange')
-                    ax.set_title('Model Loss During Training')
-                    ax.set_xlabel('Epochs')
-                    ax.set_ylabel('Loss')
-                    ax.legend()
-                    ax.grid(True)
-
-                    # Display the plot in Streamlit
-                    st.pyplot(fig)
                                            
     elif menu == "Data Visualization":
         st.subheader("Data Visualization")
